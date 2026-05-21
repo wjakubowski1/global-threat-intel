@@ -1,6 +1,7 @@
 import socket
 import datetime
 import sqlite3
+import requests
 
 
 # connect to SQLite / creates the file if it doesn't exist
@@ -26,6 +27,7 @@ PORT = 2222      # use a port above 1024 so we don't need root/admin privileges
 
 print("-" * 50)
 print(f"[*] Honeypot is active. Listening on port {PORT}...")
+print("[*] Database 'threat_logs.db' is ready and recording with Geolocation.")
 print("-" * 50)
 
 # create the network socket
@@ -45,27 +47,45 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             
             print(f"[{timestamp}] [ALERT] Incoming connection from: {attacker_ip}:{attacker_port}")
             
+            country = "Unknown"
+            city = "Unknown"
+            
+            if attacker_ip == "127.0.0.1":
+                country = "Localhost"
+                city = "Local network"
+                print("[*] IP is local. Skipping API request.")
+            else:
+                try:
+                    # query the external API for real IP addresses
+                    response = requests.get(f"http://ip-api.com/json/{attacker_ip}", timeout=3)
+                    api_data = response.json()
+                    
+                    if api_data.get("status") == "success":
+                        country = api_data.get("country", "Unknown")
+                        city = api_data.get("city", "Unknown")
+                        print(f"[*] Geolocation matched: {city}, {country}")
+                except Exception as e:
+                    print("[!] Geolocation API error. Proceeding with 'Unknown'.")
+
             # send a fake response (banner) to trick automated scanners
             fake_banner = b"Ubuntu 22.04 LTS\nLogin: "
             conn.sendall(fake_banner)
             
-            # capture whatever the attacker types
+            # capture payload and save to db
             try:
                 data = conn.recv(1024)
                 if data:
-                    # decode the raw bytes into a readable string
                     payload = data.decode('utf-8', errors='ignore').strip()
                     print(f"[*] Captured payload: {payload}")
                     
-                    # database Injection
-                    # save the captured details into the SQLite database
+                    # Injecting enriched data into the database
                     cursor.execute('''
-                        INSERT INTO attacks (timestamp, ip_address, port, payload) 
-                        VALUES (?, ?, ?, ?)
-                    ''', (timestamp, attacker_ip, attacker_port, payload))
+                        INSERT INTO attacks (timestamp, ip_address, port, country, city, payload) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (timestamp, attacker_ip, attacker_port, country, city, payload))
                     
-                    db.commit() # save changes to the disk physically
-                    print("[*] Attack successfully logged to the database.")
+                    db.commit() 
+                    print("[*] Attack logged to the database successfully.")
                     
             except Exception as e:
                 # catch and ignore errors so the honeypot doesn't crash on bad inputs
