@@ -1,0 +1,11 @@
+# db and logs
+*.db
+threat_logs.db
+
+# python venv
+venv/
+env/
+
+# python cache
+__pycache__/
+*.pyc
