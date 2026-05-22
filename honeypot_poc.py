@@ -14,8 +14,10 @@ cursor.execute('''
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT,
         ip_address TEXT,
-         port INTEGER,
-         payload TEXT
+        port INTEGER,
+        country TEXT,
+        city TEXT,
+        payload TEXT
     )
 ''')
 db.commit()
@@ -88,5 +90,4 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     print("[*] Attack logged to the database successfully.")
                     
             except Exception as e:
-                # catch and ignore errors so the honeypot doesn't crash on bad inputs
-                pass
+                print(f"[-] Error processing: {e}")
