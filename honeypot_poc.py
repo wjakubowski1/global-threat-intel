@@ -17,6 +17,8 @@ cursor.execute('''
         port INTEGER,
         country TEXT,
         city TEXT,
+        lat REAL,
+        lon REAL,
         payload TEXT
     )
 ''')
@@ -49,45 +51,43 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             
             print(f"[{timestamp}] [ALERT] Incoming connection from: {attacker_ip}:{attacker_port}")
             
-            country = "Unknown"
-            city = "Unknown"
-            
-            if attacker_ip == "127.0.0.1":
-                country = "Localhost"
-                city = "Local network"
-                print("[*] IP is local. Skipping API request.")
-            else:
-                try:
-                    # query the external API for real IP addresses
-                    response = requests.get(f"http://ip-api.com/json/{attacker_ip}", timeout=3)
-                    api_data = response.json()
-                    
-                    if api_data.get("status") == "success":
-                        country = api_data.get("country", "Unknown")
-                        city = api_data.get("city", "Unknown")
-                        print(f"[*] Geolocation matched: {city}, {country}")
-                except Exception as e:
-                    print("[!] Geolocation API error. Proceeding with 'Unknown'.")
+            country, city, lat, lon, payload = "Unknown", "Unknown", 0.0, 0.0, "No payload"
 
-            # send a fake response (banner) to trick automated scanners
-            fake_banner = b"Ubuntu 22.04 LTS\nLogin: "
-            conn.sendall(fake_banner)
-            
-            # capture payload and save to db
+        if attacker_ip == "127.0.0.1":
+            country, city = "Localhost", "Localhost"
+            print("[*] IP is local. Skipping API request.")
+        else:
             try:
-                data = conn.recv(1024)
-                if data:
-                    payload = data.decode('utf-8', errors='ignore').strip()
-                    print(f"[*] Captured payload: {payload}")
-                    
-                    # Injecting enriched data into the database
-                    cursor.execute('''
-                        INSERT INTO attacks (timestamp, ip_address, port, country, city, payload) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (timestamp, attacker_ip, attacker_port, country, city, payload))
-                    
-                    db.commit() 
-                    print("[*] Attack logged to the database successfully.")
-                    
+                # query the external API for real IP addresses
+                response = requests.get(f"http://ip-api.com/json/{attacker_ip}", timeout=3)
+                api_data = response.json()
+                
+                if api_data.get("status") == "success":
+                    country = api_data.get("country", "Unknown")
+                    city = api_data.get("city", "Unknown")
+                    lat = api_data.get("lat", 0.0)
+                    lon = api_data.get("lon", 0.0)
             except Exception as e:
-                print(f"[-] Error processing: {e}")
+                print(f"[!] Geolocation API error: {e}")
+
+        # recieve data and override empty payload
+        try:
+            data = conn.recv(1024)
+            if data:
+                payload = data.decode('utf-8', errors='ignore').strip()
+                print(f"[*] Captured payload: {payload}")
+        except Exception as e:
+            print(f"[-] Data receive error: {e}")
+
+        # export enriched data to the database
+        try:
+            cursor.execute('''
+                INSERT INTO attacks (timestamp, ip_address, port, country, city, lat, lon, payload)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (timestamp, attacker_ip, attacker_port, country, city, lat, lon, payload))
+            
+            db.commit()
+            print("[*] Attack logged to the database successfully.")
+            
+        except Exception as e:
+            print(f"[-] Error processing DB: {e}")
