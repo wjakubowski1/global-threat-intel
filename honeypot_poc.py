@@ -44,6 +44,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         conn, addr = s.accept()
         
         with conn:
+            # set timeout to prevent attackers from blocking the trap
+            conn.settimeout(5)
+            
             # when someone connects, grab their details
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             attacker_ip = addr[0]
@@ -53,31 +56,40 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             
             country, city, lat, lon, payload = "Unknown", "Unknown", 0.0, 0.0, "No payload"
 
+            # recieve data inside the active connection
+            try:
+                data = conn.recv(1024)
+                if data:
+                    payload = data.decode('utf-8', errors='ignore').strip()
+                    print(f"[*] Captured payload: {payload}")
+            except Exception as e:
+                print(f"[-] Data receive error: {e}")
+
         if attacker_ip == "127.0.0.1":
             country, city = "Localhost", "Localhost"
             print("[*] IP is local. Skipping API request.")
         else:
             try:
-                # query the external API for real IP addresses
-                response = requests.get(f"http://ip-api.com/json/{attacker_ip}", timeout=3)
+                # query the external API using https for security
+                url = f"https://ipinfo.io/{attacker_ip}/json"
+                response = requests.get(url, timeout=3)
+                
+                # throw exception if api returns an error code
+                response.raise_for_status()
+                
                 api_data = response.json()
                 
-                if api_data.get("status") == "success":
-                    country = api_data.get("country", "Unknown")
-                    city = api_data.get("city", "Unknown")
-                    lat = api_data.get("lat", 0.0)
-                    lon = api_data.get("lon", 0.0)
+                country = api_data.get("country", "Unknown")
+                city = api_data.get("city", "Unknown")
+                
+                # ipinfo.io stores coordinates in one string "lat,lon"
+                loc = api_data.get("loc", "0,0").split(",")
+                if len(loc) == 2:
+                    lat = float(loc[0])
+                    lon = float(loc[1])
+                    
             except Exception as e:
                 print(f"[!] Geolocation API error: {e}")
-
-        # recieve data and override empty payload
-        try:
-            data = conn.recv(1024)
-            if data:
-                payload = data.decode('utf-8', errors='ignore').strip()
-                print(f"[*] Captured payload: {payload}")
-        except Exception as e:
-            print(f"[-] Data receive error: {e}")
 
         # export enriched data to the database
         try:
