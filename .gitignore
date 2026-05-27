@@ -9,4 +9,7 @@ env/
 # python cache
 __pycache__/
 *.pyc
+
+# db and sh
 threat_logs.db
+sync_logs.sh
