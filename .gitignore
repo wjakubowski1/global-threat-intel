@@ -8,4 +8,5 @@ env/
 
 # python cache
 __pycache__/
-*.pycthreat_logs.db
+*.pyc
+threat_logs.db
