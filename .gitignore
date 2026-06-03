@@ -5,6 +5,7 @@ threat_logs.db
 # python venv
 venv/
 env/
+.env
 
 # python cache
 __pycache__/
